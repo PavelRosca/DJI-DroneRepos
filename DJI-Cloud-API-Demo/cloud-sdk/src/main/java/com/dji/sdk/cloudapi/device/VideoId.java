@@ -9,6 +9,7 @@ import org.springframework.util.StringUtils;
 
 import javax.validation.constraints.NotNull;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -31,7 +32,16 @@ public class VideoId {
     }
 
     @JsonCreator
-    public VideoId(String videoId) {
+    public VideoId(Object videoId) {
+        if (videoId instanceof Map<?, ?>) {
+            Map<?, ?> mapValue = (Map<?, ?>) videoId;
+            this.parseFromMap(mapValue);
+            return;
+        }
+        this.parseFromString(Objects.toString(videoId, ""));
+    }
+
+    private void parseFromString(String videoId) {
         if (!StringUtils.hasText(videoId)) {
             return;
         }
@@ -42,6 +52,55 @@ public class VideoId {
         this.droneSn = videoIdArr[0];
         this.payloadIndex = new PayloadIndex(videoIdArr[1]);
         this.videoType = VideoTypeEnum.find(videoIdArr[2].split("-")[0]);
+    }
+
+    private void parseFromMap(Map<?, ?> mapValue) {
+        Object droneSnValue = firstNonNull(mapValue.get("drone_sn"), mapValue.get("droneSn"));
+        Object payloadIndexValue = firstNonNull(mapValue.get("payload_index"), mapValue.get("payloadIndex"));
+        Object videoTypeValue = firstNonNull(mapValue.get("video_type"), mapValue.get("videoType"));
+
+        this.droneSn = Objects.toString(droneSnValue, "");
+        this.payloadIndex = parsePayloadIndex(payloadIndexValue);
+
+        if (videoTypeValue != null) {
+            this.videoType = VideoTypeEnum.find(Objects.toString(videoTypeValue, ""));
+        }
+    }
+
+    private PayloadIndex parsePayloadIndex(Object payloadIndexValue) {
+        if (payloadIndexValue == null) {
+            return null;
+        }
+        if (payloadIndexValue instanceof String) {
+            String payloadIndexText = (String) payloadIndexValue;
+            return new PayloadIndex(payloadIndexText);
+        }
+        if (!(payloadIndexValue instanceof Map<?, ?>)) {
+            return new PayloadIndex(Objects.toString(payloadIndexValue, ""));
+        }
+        Map<?, ?> payloadIndexMap = (Map<?, ?>) payloadIndexValue;
+
+        Object typeValue = firstNonNull(payloadIndexMap.get("type"), payloadIndexMap.get("payload_type"));
+        Object subTypeValue = firstNonNull(payloadIndexMap.get("sub_type"), payloadIndexMap.get("subType"));
+        Object positionValue = firstNonNull(payloadIndexMap.get("position"), payloadIndexMap.get("payload_position"));
+
+        int type = parseIntValue(typeValue);
+        int subType = parseIntValue(subTypeValue);
+        int position = parseIntValue(positionValue);
+
+        return new PayloadIndex(type + "-" + subType + "-" + position);
+    }
+
+    private int parseIntValue(Object value) {
+        if (value instanceof Number) {
+            Number number = (Number) value;
+            return number.intValue();
+        }
+        return Integer.parseInt(Objects.toString(value, "0"));
+    }
+
+    private Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
     }
 
     @Override

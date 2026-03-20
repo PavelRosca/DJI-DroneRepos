@@ -4,6 +4,10 @@ import com.dji.sample.manage.model.dto.*;
 import com.dji.sample.manage.model.param.DeviceQueryParam;
 import com.dji.sample.manage.service.*;
 import com.dji.sdk.cloudapi.device.DeviceDomainEnum;
+import com.dji.sdk.cloudapi.device.OsdCamera;
+import com.dji.sdk.cloudapi.device.OsdDockDrone;
+import com.dji.sdk.cloudapi.device.OsdRcDrone;
+import com.dji.sdk.cloudapi.device.RcDronePayload;
 import com.dji.sdk.cloudapi.device.VideoId;
 import com.dji.sdk.cloudapi.livestream.*;
 import com.dji.sdk.cloudapi.livestream.api.AbstractLivestreamService;
@@ -11,11 +15,13 @@ import com.dji.sdk.common.HttpResultResponse;
 import com.dji.sdk.common.SDKManager;
 import com.dji.sdk.mqtt.services.ServicesReplyData;
 import com.dji.sdk.mqtt.services.TopicServicesResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -27,6 +33,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Transactional
+@Slf4j
 public class LiveStreamServiceImpl implements ILiveStreamService {
 
     @Autowired
@@ -57,12 +64,85 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
         // Query the live capability of each drone.
         return devicesList.stream()
                 .filter(device -> deviceRedisService.checkDeviceOnline(device.getDeviceSn()))
-                .map(device -> CapacityDeviceDTO.builder()
-                        .name(Objects.requireNonNullElse(device.getNickname(), device.getDeviceName()))
-                        .sn(device.getDeviceSn())
-                        .camerasList(capacityCameraService.getCapacityCameraByDeviceSn(device.getDeviceSn()))
-                        .build())
+            .map(device -> {
+                List<CapacityCameraDTO> cameras = resolveCapacityCamera(device.getDeviceSn());
+                log.debug("live capacity resolved. sn={}, cameras={}", device.getDeviceSn(), cameras == null ? 0 : cameras.size());
+                return CapacityDeviceDTO.builder()
+                    .name(Objects.requireNonNullElse(device.getNickname(), device.getDeviceName()))
+                    .sn(device.getDeviceSn())
+                    .camerasList(cameras)
+                    .build();
+            })
                 .collect(Collectors.toList());
+    }
+
+    private List<CapacityCameraDTO> resolveCapacityCamera(String deviceSn) {
+        List<CapacityCameraDTO> fromLiveCapacity = capacityCameraService.getCapacityCameraByDeviceSn(deviceSn);
+        if (fromLiveCapacity != null && !fromLiveCapacity.isEmpty()) {
+            return normalizeCapacityCameraList(fromLiveCapacity);
+        }
+
+        Optional<OsdRcDrone> rcDroneOsdOpt = deviceRedisService.getDeviceOsd(deviceSn, OsdRcDrone.class);
+        if (rcDroneOsdOpt.isPresent() && rcDroneOsdOpt.get().getPayloads() != null) {
+            return rcDroneOsdOpt.get().getPayloads().stream()
+                    .filter(Objects::nonNull)
+                    .map(RcDronePayload::getPayloadIndex)
+                    .filter(Objects::nonNull)
+                    .map(Object::toString)
+                    .map(this::buildFallbackCamera)
+                    .collect(Collectors.toList());
+        }
+
+        Optional<OsdDockDrone> dockDroneOsdOpt = deviceRedisService.getDeviceOsd(deviceSn, OsdDockDrone.class);
+        if (dockDroneOsdOpt.isPresent() && dockDroneOsdOpt.get().getCameras() != null) {
+            return toCapacityCameraList(dockDroneOsdOpt.get().getCameras());
+        }
+
+        return normalizeCapacityCameraList(fromLiveCapacity);
+    }
+
+    private List<CapacityCameraDTO> normalizeCapacityCameraList(List<CapacityCameraDTO> cameras) {
+        if (cameras == null) {
+            return List.of();
+        }
+
+        return cameras.stream()
+                .filter(Objects::nonNull)
+                .peek(camera -> {
+                    if (camera.getName() == null || camera.getName().isBlank()) {
+                        camera.setName(camera.getIndex());
+                    }
+                })
+                .collect(Collectors.toList());
+    }
+
+    private List<CapacityCameraDTO> toCapacityCameraList(List<OsdCamera> osdCameras) {
+        return osdCameras.stream()
+                .filter(Objects::nonNull)
+                .map(this::toCapacityCamera)
+                .collect(Collectors.toList());
+    }
+
+    private CapacityCameraDTO toCapacityCamera(OsdCamera osdCamera) {
+        String index = Optional.ofNullable(osdCamera.getPayloadIndex())
+                .map(Object::toString)
+                .orElse("");
+
+        return buildFallbackCamera(index);
+        }
+
+        private CapacityCameraDTO buildFallbackCamera(String index) {
+
+        return CapacityCameraDTO.builder()
+                .name(index)
+                .index(index)
+                .type("normal")
+                .videosList(List.of(CapacityVideoDTO.builder()
+                        .index("normal-0")
+                        .type("normal")
+                        .switchVideoTypes(List.of("wide", "zoom", "ir"))
+                        .build()))
+                .build();
     }
 
     @Override
@@ -76,7 +156,7 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
         ILivestreamUrl url = LiveStreamProperty.get(liveParam.getUrlType());
         url = setExt(liveParam.getUrlType(), url, liveParam.getVideoId());
 
-        TopicServicesResponse<ServicesReplyData<String>> response = abstractLivestreamService.liveStartPush(
+        TopicServicesResponse<ServicesReplyData<Object>> response = abstractLivestreamService.liveStartPush(
                 SDKManager.getDeviceSDK(responseResult.getData().getDeviceSn()),
                 new LiveStartPushRequest()
                         .setUrl(url)
@@ -108,16 +188,39 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
                         .toString());
                 break;
             case RTSP:
-                live.setUrl(response.getData().getOutput());
+                live.setUrl(resolveRtspUrl(response.getData().getOutput()));
                 break;
             case WHIP:
-                live.setUrl(url.toString().replace("whip", "whep"));
+                live.setUrl(buildWhepUrl((LivestreamWhipUrl) url));
                 break;
             default:
                 return HttpResultResponse.error(LiveErrorCodeEnum.URL_TYPE_NOT_SUPPORTED);
         }
 
         return HttpResultResponse.success(live);
+    }
+
+    private String resolveRtspUrl(Object output) {
+        if (output instanceof String) {
+            return (String) output;
+        }
+        if (output instanceof Map<?, ?>) {
+            Map<?, ?> outputMap = (Map<?, ?>) output;
+            Object url = outputMap.get("url");
+            return Objects.toString(url, "");
+        }
+        return Objects.toString(output, "");
+    }
+
+    private String buildWhepUrl(LivestreamWhipUrl whipUrl) {
+        String url = whipUrl.getUrl();
+        if (url.endsWith("/whip")) {
+            return url.substring(0, url.length() - "/whip".length()) + "/whep";
+        }
+        if (url.endsWith("/whip/")) {
+            return url.substring(0, url.length() - "/whip/".length()) + "/whep";
+        }
+        return url;
     }
 
     @Override
@@ -226,8 +329,13 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
                 return gbUrl.setChannel(gbUrl.getChannel().substring(0, 20 - deviceType.length()) + deviceType);
             case WHIP:
                 LivestreamWhipUrl whipUrl = (LivestreamWhipUrl) url.clone();
-                return whipUrl.setUrl(whipUrl.getUrl() + videoId.getDroneSn() + "-" + videoId.getPayloadIndex().toString());
+                return whipUrl.setUrl(buildWhipPublishUrl(whipUrl.getUrl(), videoId));
         }
         return url;
+    }
+
+    private String buildWhipPublishUrl(String baseUrl, VideoId videoId) {
+        String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        return normalizedBaseUrl + "/" + videoId.getDroneSn() + "-" + videoId.getPayloadIndex() + "/whip";
     }
 }

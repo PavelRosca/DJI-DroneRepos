@@ -25,6 +25,8 @@ public enum RcStateDataKeyEnum {
     LIVE_STATUS(Set.of("live_status"), RcLiveStatus.class),
 
     PAYLOAD_FIRMWARE(PayloadModelConst.getAllModelWithPosition(), PayloadFirmwareVersion.class),
+
+    UNKNOWN(Collections.emptySet(), Object.class),
     ;
 
     private final Set<String> keys;
@@ -46,8 +48,8 @@ public enum RcStateDataKeyEnum {
     }
 
     public static RcStateDataKeyEnum find(Set<String> keys) {
-        return Arrays.stream(values()).filter(keyEnum -> !Collections.disjoint(keys, keyEnum.keys)).findAny()
-                .orElseThrow(() -> new CloudSDKException(RcStateDataKeyEnum.class, keys));
+        return Arrays.stream(values()).filter(keyEnum -> !keyEnum.keys.isEmpty() && !Collections.disjoint(keys, keyEnum.keys)).findAny()
+                .orElse(UNKNOWN);
     }
 
 }

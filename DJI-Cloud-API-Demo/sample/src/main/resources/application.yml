@@ -150,7 +150,7 @@ livestream:
 
     # RTMP  Note: This IP is the address of the streaming server. If you want to see livestream on web page, you need to convert the RTMP stream to WebRTC stream.
     rtmp:
-      url: Please enter the rtmp access address.  # Example: 'rtmp://192.168.1.1/live/'
+      url: rtmp://192.168.1.174/live/  # Example: 'rtmp://192.168.1.1/live/'
     rtsp:
       username: Please enter the username.
       password: Please enter the password.
@@ -168,4 +168,4 @@ livestream:
 
     # Webrtc: Only supports using whip standard
     whip:
-      url: Please enter the rtmp access address. #  Example：http://192.168.1.1:1985/rtc/v1/whip/?app=live&stream=
+      url: http://192.168.1.174:8889 # Example: 'http://192.168.1.1:8889'

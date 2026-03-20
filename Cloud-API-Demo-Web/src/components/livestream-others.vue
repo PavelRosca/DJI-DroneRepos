@@ -36,13 +36,13 @@
         class="ml10"
         style="width:150px"
         placeholder="Select Drone"
+        @change="onDroneChange"
         v-model:value="droneSelected"
       >
         <a-select-option
           v-for="item in droneList"
           :key="item.value"
           :value="item.value"
-          @click="onDroneSelect(item)"
           >{{ item.label }}</a-select-option
         >
       </a-select>
@@ -50,13 +50,13 @@
         class="ml10"
         style="width:150px"
         placeholder="Select Camera"
+        @change="onCameraChange"
         v-model:value="cameraSelected"
       >
         <a-select-option
           v-for="item in cameraList"
           :key="item.value"
           :value="item.value"
-          @click="onCameraSelect(item)"
           >{{ item.label }}</a-select-option
         >
       </a-select>
@@ -180,16 +180,18 @@ const videoList = ref()
 const droneSelected = ref()
 const cameraSelected = ref()
 const videoSelected = ref()
-const claritySelected = ref()
+const claritySelected = ref(0)
 const videoId = ref()
 const liveState = ref<boolean>(false)
-const livetypeSelected = ref()
+const livetypeSelected = ref(4)
 const rtspData = ref()
 const lensList = ref<string[]>([])
 const lensSelected = ref<String>()
 const isDockLive = ref(false)
 const nonSwitchable = 'normal'
 let webrtc: any = null
+const WEBRTC_PLAY_RETRY_COUNT = 8
+const WEBRTC_PLAY_RETRY_DELAY_MS = 1200
 
 const onRefresh = async () => {
   droneList.value = []
@@ -213,9 +215,12 @@ const onRefresh = async () => {
         const temp: Array<SelectOption> = []
         if (livestreamSource.value) {
           livestreamSource.value.forEach((ele: any) => {
-            temp.push({ label: ele.name + '-' + ele.sn, value: ele.sn, more: ele.cameras_list })
+            temp.push({ label: ele.name + '-' + ele.sn, value: ele.sn, more: ele.cameras_list || ele.camerasList || [] })
           })
           droneList.value = temp
+          if (droneList.value.length > 0) {
+            onDroneSelect(droneList.value[0])
+          }
         }
       }
     })
@@ -327,6 +332,10 @@ const onStart = async () => {
     })
 }
 const onStop = () => {
+  if (droneSelected.value == null || cameraSelected.value == null) {
+    message.warn('warning: drone/camera not selected, nothing to stop.')
+    return
+  }
   videoId.value =
     droneSelected.value + '/' + cameraSelected.value + '/' + (videoSelected.value || nonSwitchable + '-0')
 
@@ -372,10 +381,22 @@ const onDroneSelect = (val: SelectOption) => {
     return
   }
   val.more.forEach((ele: any) => {
-    temp.push({ label: ele.name, value: ele.index, more: ele.videos_list })
+    temp.push({ label: ele.name, value: ele.index, more: ele.videos_list || ele.videosList || [] })
   })
   cameraList.value = temp
+
+  if (cameraList.value.length > 0) {
+    onCameraSelect(cameraList.value[0])
+  }
 }
+
+const onDroneChange = (value: string) => {
+  const selected = droneList.value.find((item: SelectOption) => item.value === value)
+  if (selected) {
+    onDroneSelect(selected)
+  }
+}
+
 const onCameraSelect = (val: SelectOption) => {
   cameraSelected.value = val.value
   const result: Array<SelectOption> = []
@@ -387,7 +408,7 @@ const onCameraSelect = (val: SelectOption) => {
   }
 
   val.more.forEach((ele: any) => {
-    result.push({ label: ele.type, value: ele.index, more: ele.switch_video_types })
+    result.push({ label: ele.type, value: ele.index, more: ele.switch_video_types || ele.switchVideoTypes || [] })
   })
   videoList.value = result
   if (videoList.value.length === 0) {
@@ -398,6 +419,13 @@ const onCameraSelect = (val: SelectOption) => {
   lensList.value = firstVideo.more
   lensSelected.value = firstVideo.label
   isDockLive.value = lensList.value?.length > 0
+}
+
+const onCameraChange = (value: string) => {
+  const selected = cameraList.value.find((item: SelectOption) => item.value === value)
+  if (selected) {
+    onCameraSelect(selected)
+  }
 }
 const onVideoSelect = (val: SelectOption) => {
   videoSelected.value = val.value
@@ -421,7 +449,7 @@ const onSwitch = () => {
     }
   })
 }
-const playWebrtc = (videoElement: HTMLMediaElement, url: string) => {
+const playWebrtc = (videoElement: HTMLMediaElement, url: string, retryCount = 0) => {
   if (webrtc) {
     webrtc.close()
   }
@@ -429,9 +457,19 @@ const playWebrtc = (videoElement: HTMLMediaElement, url: string) => {
   videoElement.srcObject = webrtc.stream
   webrtc.play(url).then(function (session: any) {
     console.info(session)
+    message.success('WebRTC livestream connected.')
   }).catch(function (reason: any) {
     webrtc.close()
+    const xhrStatus = reason?.status
+    const isTransient = xhrStatus === 404 || xhrStatus === 400
+    if (isTransient && retryCount < WEBRTC_PLAY_RETRY_COUNT) {
+      const nextTry = retryCount + 1
+      console.warn(`WebRTC not ready yet (status ${xhrStatus}), retry ${nextTry}/${WEBRTC_PLAY_RETRY_COUNT}`)
+      setTimeout(() => playWebrtc(videoElement, url, nextTry), WEBRTC_PLAY_RETRY_DELAY_MS)
+      return
+    }
     console.error(reason)
+    message.error('WebRTC livestream failed to connect.')
   })
 }
 </script>

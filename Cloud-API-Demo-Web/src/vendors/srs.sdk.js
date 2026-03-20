@@ -573,7 +573,7 @@ function SrsRtcWhipWhepAsync() {
   // @url The WebRTC url to play with, for example:
   //      http://localhost:1985/rtc/v1/whep/?app=live&stream=livestream
   self.play = async function (url) {
-    if (url.indexOf('/whip-play/') === -1 && url.indexOf('/whep/') === -1) throw new Error(`invalid WHEP url ${url}`);
+    if (url.indexOf('/whip-play/') === -1 && url.indexOf('/whep/') === -1 && !url.endsWith('/whep')) throw new Error(`invalid WHEP url ${url}`);
 
     self.pc.addTransceiver("video", { direction: "recvonly" });
 

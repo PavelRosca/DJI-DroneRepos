@@ -13,13 +13,13 @@
       <a-select
         style="width:150px"
         placeholder="Select Drone"
+        @change="onDroneChange"
         v-model:value="dronePara.droneSelected"
       >
         <a-select-option
           v-for="item in dronePara.droneList"
           :key="item.value"
           :value="item.value"
-          @click="onDroneSelect(item)"
           >{{ item.label }}</a-select-option
         >
       </a-select>
@@ -27,13 +27,13 @@
         class="ml10"
         style="width:150px"
         placeholder="Select Camera"
+        @change="onCameraChange"
         v-model:value="dronePara.cameraSelected"
       >
         <a-select-option
           v-for="item in dronePara.cameraList"
           :key="item.value"
           :value="item.value"
-          @click="onCameraSelect(item)"
           >{{ item.label }}</a-select-option
         >
       </a-select>
@@ -189,7 +189,11 @@ const onRefresh = async () => {
 
         if (dronePara.livestreamSource) {
           dronePara.livestreamSource.forEach((ele: any) => {
-            dronePara.droneList.push({ label: ele.name + '-' + ele.sn, value: ele.sn, more: ele.cameras_list })
+            dronePara.droneList.push({
+              label: ele.name + '-' + ele.sn,
+              value: ele.sn,
+              more: ele.cameras_list || ele.camerasList || []
+            })
           })
         }
       }
@@ -329,9 +333,25 @@ const onDroneSelect = (val: SelectOption) => {
     return
   }
   val.more.forEach((ele: any) => {
-    dronePara.cameraList.push({ label: ele.name, value: ele.index, more: ele.videos_list })
+    dronePara.cameraList.push({
+      label: ele.name,
+      value: ele.index,
+      more: ele.videos_list || ele.videosList || []
+    })
   })
+
+  if (dronePara.cameraList.length > 0) {
+    onCameraSelect(dronePara.cameraList[0])
+  }
 }
+
+const onDroneChange = (value: string) => {
+  const selected = dronePara.droneList.find((item: SelectOption) => item.value === value)
+  if (selected) {
+    onDroneSelect(selected)
+  }
+}
+
 const onCameraSelect = (val: SelectOption) => {
   dronePara.cameraSelected = val.value
   dronePara.videoSelected = undefined
@@ -343,7 +363,11 @@ const onCameraSelect = (val: SelectOption) => {
   }
 
   val.more.forEach((ele: any) => {
-    dronePara.videoList.push({ label: ele.type, value: ele.index, more: ele.switch_video_types })
+    dronePara.videoList.push({
+      label: ele.type,
+      value: ele.index,
+      more: ele.switch_video_types || ele.switchVideoTypes || []
+    })
   })
   if (dronePara.videoList.length === 0) {
     return
@@ -353,6 +377,13 @@ const onCameraSelect = (val: SelectOption) => {
   dronePara.lensList = firstVideo.more
   dronePara.lensSelected = firstVideo.label
   dronePara.isDockLive = dronePara.lensList?.length > 0
+}
+
+const onCameraChange = (value: string) => {
+  const selected = dronePara.cameraList.find((item: SelectOption) => item.value === value)
+  if (selected) {
+    onCameraSelect(selected)
+  }
 }
 const onVideoSelect = (val: SelectOption) => {
   dronePara.videoSelected = val.value

@@ -539,10 +539,42 @@ const payloadSelectInfo = {
   camera: undefined as undefined | DeviceOsdCamera // 当前负载osd信息
 }
 
+const buildPayloadIndex = (payload?: PayloadInfo): string => {
+  if (!payload) {
+    return ''
+  }
+
+  const rawIndex = String(payload.payload_index || '').trim()
+  if (rawIndex.includes('-')) {
+    return rawIndex
+  }
+
+  const modelParts = String(payload.model || '').split('-')
+  if (modelParts.length >= 3) {
+    return `${modelParts[1]}-${modelParts[2]}-${payload.index}`
+  }
+
+  return rawIndex || String(payload.index || '')
+}
+
+const samePayloadIndex = (cameraIndex: string, selectedIndex: string): boolean => {
+  if (!cameraIndex || !selectedIndex) {
+    return false
+  }
+
+  if (cameraIndex === selectedIndex) {
+    return true
+  }
+
+  const cameraParts = cameraIndex.split('-')
+  const selectedParts = selectedIndex.split('-')
+  return cameraParts[cameraParts.length - 1] === selectedParts[selectedParts.length - 1]
+}
+
 const handlePayloadChange = (value: string) => {
   const payload = props.payloads?.find(item => item.payload_sn === value)
   if (payload) {
-    payloadSelectInfo.payloadIndex = payload.payload_index || ''
+    payloadSelectInfo.payloadIndex = buildPayloadIndex(payload)
     payloadSelectInfo.controlSource = payload.control_source
     payloadSelectInfo.camera = undefined
   }
@@ -566,7 +598,7 @@ watch(() => props.payloads, (payloads) => {
   if (payloads && payloads.length > 0) {
     payloadSelectInfo.value = payloads[0].payload_sn
     payloadSelectInfo.controlSource = payloads[0].control_source || ControlSource.B
-    payloadSelectInfo.payloadIndex = payloads[0].payload_index || ''
+    payloadSelectInfo.payloadIndex = buildPayloadIndex(payloads[0])
     payloadSelectInfo.options = payloads.map(item => ({ label: item.payload_name, value: item.payload_sn }))
     payloadSelectInfo.camera = undefined
   } else {
@@ -582,7 +614,8 @@ watch(() => props.payloads, (payloads) => {
 })
 watch(() => props.deviceInfo.device, (droneOsd) => {
   if (droneOsd && droneOsd.cameras) {
-    payloadSelectInfo.camera = droneOsd.cameras.find(item => item.payload_index === payloadSelectInfo.payloadIndex)
+    payloadSelectInfo.camera = droneOsd.cameras.find(item => samePayloadIndex(item.payload_index, payloadSelectInfo.payloadIndex)) ||
+      droneOsd.cameras[0]
   } else {
     payloadSelectInfo.camera = undefined
   }

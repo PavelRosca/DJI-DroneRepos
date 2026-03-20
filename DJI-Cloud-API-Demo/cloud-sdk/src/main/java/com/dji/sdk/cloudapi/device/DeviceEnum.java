@@ -78,6 +78,10 @@ public enum DeviceEnum {
     M3TD_CAMERA(DeviceDomainEnum.PAYLOAD, DeviceTypeEnum.M3TD_CAMERA, DeviceSubTypeEnum.ZERO),
 
     M400(DeviceDomainEnum.DRONE, DeviceTypeEnum.M400, DeviceSubTypeEnum.ZERO),
+
+    H30_CAMERA(DeviceDomainEnum.PAYLOAD, DeviceTypeEnum.H30, DeviceSubTypeEnum.ZERO),
+
+    H30T_CAMERA(DeviceDomainEnum.PAYLOAD, DeviceTypeEnum.H30T, DeviceSubTypeEnum.ZERO),
     ;
 
     @Schema(enumAsRef = true)

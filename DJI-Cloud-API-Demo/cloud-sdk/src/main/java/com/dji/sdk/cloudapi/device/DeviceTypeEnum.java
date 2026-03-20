@@ -67,6 +67,10 @@ public enum DeviceTypeEnum {
 
     M3TD_CAMERA(81),
 
+    H30(82),
+
+    H30T(83),
+
     M400(103),
 
     UNKNOWN(-1),

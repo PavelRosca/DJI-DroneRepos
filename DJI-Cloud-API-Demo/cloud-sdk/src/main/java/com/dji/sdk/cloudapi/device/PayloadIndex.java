@@ -25,6 +25,11 @@ public class PayloadIndex {
     @NotNull
     private PayloadPositionEnum position;
 
+    // Store raw integer values so toString() round-trips correctly even for unknown types
+    private int rawType;
+    private int rawSubType;
+    private int rawPosition;
+
     public PayloadIndex() {
     }
 
@@ -35,15 +40,18 @@ public class PayloadIndex {
         if (payloadIndexArr.length != 3) {
             throw new CloudSDKException(CloudSDKErrorEnum.INVALID_PARAMETER);
         }
-        this.type = DeviceTypeEnum.find(payloadIndexArr[0]);
-        this.subType = DeviceSubTypeEnum.find(payloadIndexArr[1]);
-        this.position = PayloadPositionEnum.find(payloadIndexArr[2]);
+        this.rawType = payloadIndexArr[0];
+        this.rawSubType = payloadIndexArr[1];
+        this.rawPosition = payloadIndexArr[2];
+        this.type = DeviceTypeEnum.find(rawType);
+        this.subType = DeviceSubTypeEnum.find(rawSubType);
+        this.position = PayloadPositionEnum.find(rawPosition);
     }
 
     @Override
     @JsonValue
     public String toString() {
-        return String.format("%s-%s-%s", type.getType(), subType.getSubType(), position.getPosition());
+        return String.format("%d-%d-%d", rawType, rawSubType, rawPosition);
     }
 
     public DeviceTypeEnum getType() {
@@ -52,6 +60,7 @@ public class PayloadIndex {
 
     public PayloadIndex setType(DeviceTypeEnum type) {
         this.type = type;
+        this.rawType = type.getType();
         return this;
     }
 
@@ -61,6 +70,7 @@ public class PayloadIndex {
 
     public PayloadIndex setSubType(DeviceSubTypeEnum subType) {
         this.subType = subType;
+        this.rawSubType = subType.getSubType();
         return this;
     }
 
@@ -70,6 +80,7 @@ public class PayloadIndex {
 
     public PayloadIndex setPosition(PayloadPositionEnum position) {
         this.position = position;
+        this.rawPosition = position.getPosition();
         return this;
     }
 }

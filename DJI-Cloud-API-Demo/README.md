@@ -1,37 +1,185 @@
-# 关于DJI Cloud API Demo 终止维护公告
+# DJI Cloud API Demo (Backend) - Ghid Complet
 
-发布日期：2025年4月10日
+## 1. Context important
 
-1.项目终止维护说明
-即日起，大疆创新(DJI)将停止对DJI Cloud API Demo (地址：https://github.com/dji-sdk/Cloud-API-Demo-Web、https://github.com/dji-sdk/DJI-Cloud-API-Demo）示例项目的更新与技术支持。
-该项目作为官方提供的云端集成参考实现，旨在辅助开发者理解API调用逻辑。并非生产级解决方案，可能存在未修复的安全隐患（如数据泄露、未授权访问等）。请避免在生产环境中直接使用Demo中的代码，若直接使用我们强烈建议您启动安全自查，或避免将基于该Demo的服务暴露于公网环境。
+Acest proiect este backend-ul demo pentru integrare DJI Cloud API.
 
-2.免责声明
-因直接使用Demo代码导致的业务损失、数据风险或第三方纠纷，DJI将不承担任何责任。
+Proiectul este "discontinued" de catre DJI, ceea ce inseamna:
 
-3.后续支持
-如有疑问，请联系DJI开发者支持团队（邮箱：developer@dji.com)或访问大疆开发者社区获取最新技术资源。
-感谢您一直以来的理解与支持！
+- fara mentenanta activa
+- posibile incompatibilitati cu device-uri noi
+- necesita patch-uri locale pentru a functiona in prezent
 
-# DJI Cloud API
+Acest README explica arhitectura, setup-ul local si toate remediile aplicate in sesiunea curenta pentru RC Pro 2 + Matrice 400.
 
-## What is the DJI Cloud API?
+## 2. Rolul backend-ului
 
-The launch of the Cloud API mainly solves the problem of developers reinventing the wheel. For developers who do not need in-depth customization of APP, they can directly use DJI Pilot2 to communicate with the third cloud platform, and developers can focus on the development and implementation of cloud service interfaces. 
+Backend-ul gestioneaza:
 
-## Docker
+- autentificare web/pilot
+- workspace/device management
+- persistenta in MySQL
+- cache/session in Redis
+- integrare MQTT pentru status/comenzi device
+- API-uri consumate de frontend-ul Cloud-API-Demo-Web
 
-If you don't want to install the development environment, you can try deploying with docker. [Click the link to download.](https://terra-sz-hc1pro-cloudapi.oss-cn-shenzhen.aliyuncs.com/c0af9fe0d7eb4f35a8fe5b695e4d0b96/docker/cloud_api_sample_docker.zip)
+Module importante:
 
-## Usage
+- cloud-sdk (logica SDK/integration layer)
+- sample (aplicatia Spring Boot care ruleaza local)
 
-For more documentation, please visit the [DJI Developer Documentation](https://developer.dji.com/doc/cloud-api-tutorial/cn/).
+## 3. Dependinte runtime necesare
 
-## Latest Release
+Pentru pornire completa locala:
 
-Cloud API 1.10.0 was released on 7 Apr 2024. For more information, please visit the [Release Note](https://developer.dji.com/doc/cloud-api-tutorial/cn/).
+- Java 11
+- Maven 3.9.x
+- MySQL (port 3306)
+- Redis (port 6379)
+- Mosquitto MQTT
+: listener MQTT 1883
+: listener WebSocket MQTT 8083
 
-## License
+Port backend:
 
-Cloud API is MIT-licensed. Please refer to the LICENSE file for more information.
+- 6789
+
+## 4. Configurare backend
+
+Fisier central:
+
+- sample/src/main/resources/application.yml
+
+In sesiunea curenta au fost aliniate:
+
+- appId / appKey / appLicense
+- host-uri LAN pentru comunicare RC si MQTT
+- valori locale pentru startup stabil
+
+## 5. Flux functional end-to-end (simplificat)
+
+1. RC/Pilot deschide pagina H5 din frontend.
+2. Frontend face login catre backend.
+3. Backend returneaza config (inclusiv mqtt_addr).
+4. Pilot2 creeaza client MQTT pe WS (8083).
+5. Device trimite topicuri status (inclusiv online/status reply).
+6. Backend proceseaza mesajele si actualizeaza starea device/workspace.
+
+## 6. Ce s-a reparat in aceasta sesiune (foarte important)
+
+### 6.1 Compatibilitate device-uri noi (Matrice 400 si necunoscute)
+
+Problema initiala:
+
+- backend pica la deserializare pe type necunoscut (ex. 103, ulterior 174)
+
+Fixuri aplicate:
+
+- DeviceTypeEnum:
+: adaugat M400(103)
+: adaugat UNKNOWN(-1)
+: fallback in find() pentru tipuri necunoscute
+- DeviceSubTypeEnum:
+: fallback in find() la ZERO pentru subType necunoscut
+- DeviceEnum:
+: adaugat mapare M400
+: adaugat helper findOrNull pentru mapari necunoscute
+- SDKManager:
+: fallback defensiv la clasificare gateway cand enum-ul nu are modelul nou
+- DeviceServiceImpl:
+: folosire lookup tolerant pentru model key in conversii topo
+
+Rezultat:
+
+- backend nu mai crapa pe device type nou/necunoscut
+
+### 6.2 Fix downstream DB (nickname NOT NULL)
+
+Problema:
+
+- insert in manage_device esua cand dictionarul nu avea metadata pentru model nou
+
+Fix:
+
+- in SDKDeviceService s-a adaugat fallback nickname (de ex. device SN) cand metadata lipseste
+
+Rezultat:
+
+- inregistrarea device nu mai pica pe constrangerea nickname
+
+### 6.3 Build/runtime consistency
+
+Pentru ca sample sa foloseasca patch-urile cloud-sdk locale:
+
+- cloud-sdk a fost instalat local in Maven repository
+- backend restartat pe artefactul actualizat
+
+## 7. Pornire backend
+
+Din radacina repo-ului DJI-Cloud-API-Demo:
+
+1. mvn -pl sample -am -DskipTests compile
+2. cd sample
+3. mvn spring-boot:run
+
+Verificari rapide:
+
+- http://localhost:6789 (service up)
+- endpointurile protejate pot raspunde 401 fara token, ceea ce este normal
+
+## 8. Legatura cu frontend-ul
+
+Frontend-ul (Cloud-API-Demo-Web) trebuie sa fie pornit separat pe 8080.
+
+In setup-ul folosit aici:
+
+- RC intra pe frontend: http://192.168.1.174:8080/pilot-login
+- frontend comunica cu backend-ul pe 6789
+- mqtt_addr intors catre pilot este pe WS 8083
+
+## 9. Troubleshooting orientat pe problema reala
+
+### 9.1 "Device not found" desi RC se logheaza
+
+Verifica in ordine:
+
+- backend ruleaza fara exceptii de deserializare
+- broker WS 8083 este accesibil
+- workspace binding este complet
+- device apare in endpointurile de device bound
+
+### 9.2 Cloud disconnect in Pilot Home
+
+- confirma mqtt_addr valid la login pilot
+- confirma topic flow online/status reply
+- confirma ca frontend-ul activ este instanta corecta (nu alta aplicatie pe 8080)
+
+### 9.3 "Debug tool subscribe topic" din tutorial DJI
+
+"Debug tool" inseamna un client MQTT extern (ex. MQTTX) folosit pentru diagnostic topicuri.
+
+Nu este obligatoriu pentru functionarea de baza, dar este util pentru debugging.
+
+Topicuri mentionate frecvent in tutorial:
+
+- sys/product/+/status
+- sys/product/+/status_reply
+
+## 10. Nota de productie
+
+Acest cod este demo educativ, nu platforma productie.
+
+Pentru productie sunt necesare:
+
+- securizare endpointuri/tokenuri
+- TLS/HTTPS
+- credential management
+- observability, retry strategy, audit si hardening complet
+
+## 11. Referinte
+
+- DJI Developer Cloud API Tutorial:
+: https://developer.dji.com/doc/cloud-api-tutorial/cn/
+- Licenta proiect:
+: MIT (conform fisierelor originale)
 

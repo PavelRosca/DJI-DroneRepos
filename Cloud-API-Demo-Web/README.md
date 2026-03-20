@@ -1,36 +1,162 @@
-# 关于DJI Cloud API Demo 终止维护公告
+# Cloud API Demo Web (Frontend) - Ghid Complet
 
-发布日期：2025年4月10日
+## 1. Context important
 
-1.项目终止维护说明
-即日起，大疆创新(DJI)将停止对DJI Cloud API Demo (地址：https://github.com/dji-sdk/Cloud-API-Demo-Web、https://github.com/dji-sdk/DJI-Cloud-API-Demo）示例项目的更新与技术支持。
-该项目作为官方提供的云端集成参考实现，旨在辅助开发者理解API调用逻辑。并非生产级解决方案，可能存在未修复的安全隐患（如数据泄露、未授权访问等）。请避免在生产环境中直接使用Demo中的代码，若直接使用我们强烈建议您启动安全自查，或避免将基于该Demo的服务暴露于公网环境。
+Acest proiect este demo-ul frontend pentru ecosistemul DJI Cloud API.
 
-2.免责声明
-因直接使用Demo代码导致的业务损失、数据风险或第三方纠纷，DJI将不承担任何责任。
+Proiectul original este marcat de DJI ca "discontinued" (fara mentenanta activa), deci:
 
-3.后续支持
-如有疑问，请联系DJI开发者支持团队（邮箱：developer@dji.com)或访问大疆开发者社区获取最新技术资源。
-感谢您一直以来的理解与支持！
+- nu este productie-ready
+- poate avea dependinte invechite
+- necesita ajustari locale pentru a rula pe sisteme moderne
 
-# DJI Cloud API
+Acest README documenteaza ce inseamna proiectul, cum se porneste corect local si ce a fost reparat in sesiunea curenta pentru integrarea cu backend-ul si cu RC Pro 2 + Matrice 400.
 
-## What is the DJI Cloud API?
+## 2. Ce este acest frontend
 
-The launch of the Cloud API mainly solves the problem of developers reinventing the wheel. For developers who do not need in-depth customization of APP, they can directly use DJI Pilot2 to communicate with the third cloud platform, and developers can focus on the development and implementation of cloud service interfaces.
+Aplicatia web ofera interfata pentru:
 
-## Docker
+- autentificare utilizatori web/pilot
+- management workspace/device
+- map, media, wayline, cloud modules
+- fluxul "pilot-login" folosit de RC Pilot 2 in varianta H5
 
-If you don't want to install the development environment, you can try deploying with docker. [Click the link to download.](https://terra-sz-hc1pro-cloudapi.oss-cn-shenzhen.aliyuncs.com/c0af9fe0d7eb4f35a8fe5b695e4d0b96/docker/cloud_api_sample_docker.zip)
+Stack tehnic principal:
 
-## Usage
+- Vue + TypeScript
+- Vite (dev server)
+- MQTT over WebSocket (prin backend config)
 
-For more documentation, please visit the [DJI Developer Documentation](https://developer.dji.com/doc/cloud-api-tutorial/cn/).
+## 3. Relatia cu backend-ul
 
-## Latest Release
+Frontend-ul din acest folder comunica cu backend-ul din folderul:
 
-Cloud API 1.10.0 was released on 7 April 2024. For more information, please visit the [Release Note](https://developer.dji.com/doc/cloud-api-tutorial/cn/).
+- DJI-Cloud-API-Demo
 
-## License
+Flux simplificat:
 
-Cloud API is MIT-licensed. Please refer to the LICENSE file for more information.
+1. RC/Pilot intra pe pagina de login pilot din frontend.
+2. Frontend face request-uri catre backend pentru auth/workspace/device.
+3. Backend foloseste MySQL + Redis + MQTT broker (Mosquitto in setup-ul local).
+4. Status device vine prin topicuri MQTT, iar backend-ul actualizeaza starea in platforma.
+
+## 4. Configurari cheie (frontend)
+
+Fisier principal de configurare runtime:
+
+- src/api/http/config.ts
+
+In sesiunea curenta au fost aliniate valori pentru test local LAN:
+
+- APP ID / APP Key / App License din contul DJI Developer
+- host-uri API si WebSocket pentru comunicare cu backend-ul local
+- compatibilitate pentru fluxul RC Pilot 2 pe URL H5
+
+## 5. URL corect pentru RC Pilot 2
+
+Pentru setup-ul facut in aceasta sesiune, RC trebuie sa deschida:
+
+- http://192.168.1.174:8080/pilot-login
+
+Observatii:
+
+- Nu se foloseste direct 6789 pentru ecranul de login H5 din RC in acest flux.
+- 6789 ramane API backend.
+- RC si PC trebuie sa fie in acelasi LAN.
+
+## 6. Pornire frontend
+
+Din acest folder:
+
+1. npm install
+2. npm run serve
+
+Port asteptat:
+
+- 8080
+
+Verificare rapida:
+
+- http://localhost:8080
+- http://localhost:8080/pilot-login
+
+## 7. Ce s-a reparat in aceasta sesiune (frontend)
+
+### 7.1 Dependinte si instalare
+
+- s-au remediat blocaje de instalare cauzate de registry/lock-uri vechi
+- s-a curatat setup-ul de dependinte pentru pornire stabila locala
+
+### 7.2 Config Vite si pornire stabila
+
+- s-au facut ajustari de configurare pentru a porni serverul local consistent
+- s-au eliminat situatii in care multiple procese node se calcau pe acelasi port
+
+### 7.3 TypeScript
+
+Eroare rezolvata:
+
+- Cannot find type definition file for 'vite/client'
+
+Fix aplicat:
+
+- eliminat compilerOptions.types explicit din tsconfig.json
+- pastrat referinta standard in src/vite-env.d.ts
+
+## 8. Ce inseamna modulele din pilot-home
+
+In UI-ul pilot, modulul "Cloud" este legat de componenta "Thing" (MQTT init/state).
+
+Daca Cloud ramane "disconnect":
+
+- de regula frontend-ul/backend-ul nu sunt aliniate
+- sau sesiunea din RC este stale
+- sau fluxul de status MQTT nu a finalizat inca bind/online
+
+## 9. Troubleshooting rapid
+
+### 9.1 "Webpage not available" pe RC
+
+- verifica frontend pornit pe 8080
+- verifica URL complet cu http
+- verifica firewall pentru 8080
+- verifica LAN comun RC/PC
+
+### 9.2 Cloud ramane disconnect
+
+- confirma backend online pe 6789
+- confirma broker MQTT WS pe 8083
+- relogin pe pilot-login
+- uninstall/install modul Cloud o singura data, apoi asteapta
+
+### 9.3 Agora WEB_SECURITY_RESTRICT in vconsole
+
+- apare pe HTTP ne-securizat
+- nu blocheaza neaparat binding cloud/device
+- afecteaza mai ales fluxurile de livestream Agora
+
+## 10. Componente necesare in paralel
+
+Pentru functionare end-to-end trebuie sa fie sus simultan:
+
+- frontend (acest proiect)
+- backend (DJI-Cloud-API-Demo)
+- MySQL
+- Redis
+- Mosquitto (1883 + 8083 WebSocket)
+
+## 11. Nota de siguranta
+
+Acest demo este util pentru invatare si prototipare, nu pentru productie directa.
+
+Pentru productie:
+
+- hardening securitate
+- autentificare/secret management
+- TLS/HTTPS
+- audit complet al topicurilor si endpointurilor
+
+## 12. Licenta si surse
+
+- Licenta proiect: MIT (conform proiectului original)
+- Documentatie DJI Cloud API: https://developer.dji.com/doc/cloud-api-tutorial/cn/

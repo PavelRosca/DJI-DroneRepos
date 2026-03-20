@@ -61,6 +61,6 @@ HELP.md
 /backup
 /src/test/
 
-# ===== Local toolchains / binaries =====
+# ===== Local toolchainss / binaries =====
 DJI-Cloud-API-Demo/.tools/
 DJI-Cloud-API-Demo/tools/

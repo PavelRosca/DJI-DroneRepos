@@ -7,6 +7,7 @@ import com.dji.sample.manage.service.IUserService;
 import com.dji.sdk.common.HttpResultResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,11 +27,13 @@ public class LoginController {
     private IUserService userService;
 
     @PostMapping("/login")
-    public HttpResultResponse login(@RequestBody UserLoginDTO loginDTO) {
+    public HttpResultResponse login(@RequestBody UserLoginDTO loginDTO, HttpServletRequest request) {
 
         String username = loginDTO.getUsername();
         String password = loginDTO.getPassword();
-        return userService.userLogin(username, password, loginDTO.getFlag());
+        HttpResultResponse response = userService.userLogin(username, password, loginDTO.getFlag());
+        rewriteMqttAddrForClient(response, request.getServerName());
+        return response;
     }
 
     @PostMapping("/token/refresh")
@@ -43,6 +46,27 @@ public class LoginController {
             return HttpResultResponse.error(CommonErrorEnum.NO_TOKEN.getMessage());
         }
 
-        return HttpResultResponse.success(user.get());
+        HttpResultResponse result = HttpResultResponse.success(user.get());
+        rewriteMqttAddrForClient(result, request.getServerName());
+        return result;
+    }
+
+    private void rewriteMqttAddrForClient(HttpResultResponse response, String serverName) {
+        if (response == null || response.getData() == null || !StringUtils.hasText(serverName)) {
+            return;
+        }
+        if (!(response.getData() instanceof UserDTO)) {
+            return;
+        }
+
+        UserDTO user = (UserDTO) response.getData();
+        if (!StringUtils.hasText(user.getMqttAddr())) {
+            return;
+        }
+
+        String mqttAddr = user.getMqttAddr();
+        mqttAddr = mqttAddr.replace("://localhost", "://" + serverName)
+                .replace("://127.0.0.1", "://" + serverName);
+        user.setMqttAddr(mqttAddr);
     }
 }

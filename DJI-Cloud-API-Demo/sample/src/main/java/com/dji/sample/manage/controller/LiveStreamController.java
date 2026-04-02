@@ -64,7 +64,7 @@ public class LiveStreamController {
      */
     @PostMapping("/streams/stop")
     public HttpResultResponse liveStop(@RequestBody LiveTypeDTO liveParam) {
-        return liveStreamService.liveStop(liveParam.getVideoId());
+        return liveStreamService.liveStop(liveParam);
     }
 
     /**

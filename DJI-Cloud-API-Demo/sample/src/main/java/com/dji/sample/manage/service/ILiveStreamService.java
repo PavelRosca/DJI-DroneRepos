@@ -30,10 +30,10 @@ public interface ILiveStreamService {
 
     /**
      * Stop the live streaming by publishing mqtt message.
-     * @param videoId
+     * @param liveParam Parameters needed for streaming stop.
      * @return
      */
-    HttpResultResponse liveStop(VideoId videoId);
+    HttpResultResponse liveStop(LiveTypeDTO liveParam);
 
     /**
      * Readjust the clarity of the live streaming by publishing mqtt messages.

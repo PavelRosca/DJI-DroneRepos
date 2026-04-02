@@ -53,7 +53,11 @@ public class DeviceRedisServiceImpl implements IDeviceRedisService {
 
     @Override
     public <T> Optional<T> getDeviceOsd(String sn, Class<T> clazz) {
-        return Optional.ofNullable(clazz.cast(RedisOpsUtils.get(RedisConst.OSD_PREFIX + sn)));
+        Object osd = RedisOpsUtils.get(RedisConst.OSD_PREFIX + sn);
+        if (osd == null || !clazz.isInstance(osd)) {
+            return Optional.empty();
+        }
+        return Optional.of(clazz.cast(osd));
     }
 
     @Override

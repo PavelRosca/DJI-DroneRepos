@@ -21,9 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 import java.util.stream.Collectors;
 
 /**
@@ -49,6 +49,9 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
     private IDeviceRedisService deviceRedisService;
 
     @Autowired
+    private IDevicePayloadService devicePayloadService;
+
+    @Autowired
     private AbstractLivestreamService abstractLivestreamService;
 
     @Override
@@ -63,7 +66,6 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
 
         // Query the live capability of each drone.
         return devicesList.stream()
-                .filter(device -> deviceRedisService.checkDeviceOnline(device.getDeviceSn()))
             .map(device -> {
                 List<CapacityCameraDTO> cameras = resolveCapacityCamera(device.getDeviceSn());
                 log.debug("live capacity resolved. sn={}, cameras={}", device.getDeviceSn(), cameras == null ? 0 : cameras.size());
@@ -77,28 +79,60 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
     }
 
     private List<CapacityCameraDTO> resolveCapacityCamera(String deviceSn) {
-        List<CapacityCameraDTO> fromLiveCapacity = capacityCameraService.getCapacityCameraByDeviceSn(deviceSn);
-        if (fromLiveCapacity != null && !fromLiveCapacity.isEmpty()) {
-            return normalizeCapacityCameraList(fromLiveCapacity);
+        List<String> candidateSnList = Stream.concat(
+                        Stream.of(deviceSn),
+                        deviceService.getDevicesByParams(DeviceQueryParam.builder().childSn(deviceSn).build())
+                                .stream()
+                                .map(DeviceDTO::getDeviceSn)
+                                .filter(Objects::nonNull))
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (String candidateSn : candidateSnList) {
+            List<CapacityCameraDTO> fromLiveCapacity = capacityCameraService.getCapacityCameraByDeviceSn(candidateSn);
+            if (fromLiveCapacity != null && !fromLiveCapacity.isEmpty()) {
+                return normalizeCapacityCameraList(fromLiveCapacity);
+            }
+
+            Optional<OsdRcDrone> rcDroneOsdOpt = deviceRedisService.getDeviceOsd(candidateSn, OsdRcDrone.class);
+            if (rcDroneOsdOpt.isPresent() && rcDroneOsdOpt.get().getPayloads() != null) {
+                List<CapacityCameraDTO> cameras = rcDroneOsdOpt.get().getPayloads().stream()
+                        .filter(Objects::nonNull)
+                        .map(RcDronePayload::getPayloadIndex)
+                        .filter(Objects::nonNull)
+                        .map(Object::toString)
+                        .distinct()
+                        .map(this::buildFallbackCamera)
+                        .collect(Collectors.toList());
+                if (!cameras.isEmpty()) {
+                    return cameras;
+                }
+            }
+
+            Optional<OsdDockDrone> dockDroneOsdOpt = deviceRedisService.getDeviceOsd(candidateSn, OsdDockDrone.class);
+            if (dockDroneOsdOpt.isPresent() && dockDroneOsdOpt.get().getCameras() != null) {
+                List<CapacityCameraDTO> cameras = toCapacityCameraList(dockDroneOsdOpt.get().getCameras());
+                if (!cameras.isEmpty()) {
+                    return cameras;
+                }
+            }
+
+            List<DevicePayloadDTO> payloads = devicePayloadService.getDevicePayloadEntitiesByDeviceSn(candidateSn);
+            if (payloads != null && !payloads.isEmpty()) {
+                List<CapacityCameraDTO> cameras = payloads.stream()
+                        .map(DevicePayloadDTO::getPayloadIndex)
+                        .filter(Objects::nonNull)
+                        .map(Object::toString)
+                        .distinct()
+                        .map(this::buildFallbackCamera)
+                        .collect(Collectors.toList());
+                if (!cameras.isEmpty()) {
+                    return cameras;
+                }
+            }
         }
 
-        Optional<OsdRcDrone> rcDroneOsdOpt = deviceRedisService.getDeviceOsd(deviceSn, OsdRcDrone.class);
-        if (rcDroneOsdOpt.isPresent() && rcDroneOsdOpt.get().getPayloads() != null) {
-            return rcDroneOsdOpt.get().getPayloads().stream()
-                    .filter(Objects::nonNull)
-                    .map(RcDronePayload::getPayloadIndex)
-                    .filter(Objects::nonNull)
-                    .map(Object::toString)
-                    .map(this::buildFallbackCamera)
-                    .collect(Collectors.toList());
-        }
-
-        Optional<OsdDockDrone> dockDroneOsdOpt = deviceRedisService.getDeviceOsd(deviceSn, OsdDockDrone.class);
-        if (dockDroneOsdOpt.isPresent() && dockDroneOsdOpt.get().getCameras() != null) {
-            return toCapacityCameraList(dockDroneOsdOpt.get().getCameras());
-        }
-
-        return normalizeCapacityCameraList(fromLiveCapacity);
+        return List.of(buildFallbackCamera("-1-0-1"));
     }
 
     private List<CapacityCameraDTO> normalizeCapacityCameraList(List<CapacityCameraDTO> cameras) {
@@ -147,21 +181,22 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
 
     @Override
     public HttpResultResponse liveStart(LiveTypeDTO liveParam) {
+        VideoId videoId = new VideoId(Objects.toString(liveParam.getVideoId(), ""));
         // Check if this lens is available live.
-        HttpResultResponse<DeviceDTO> responseResult = this.checkBeforeLive(liveParam.getVideoId());
+        HttpResultResponse<DeviceDTO> responseResult = this.checkBeforeLive(videoId);
         if (HttpResultResponse.CODE_SUCCESS != responseResult.getCode()) {
             return responseResult;
         }
 
         ILivestreamUrl url = LiveStreamProperty.get(liveParam.getUrlType());
-        url = setExt(liveParam.getUrlType(), url, liveParam.getVideoId());
+        url = setExt(liveParam.getUrlType(), url, videoId);
 
         TopicServicesResponse<ServicesReplyData<Object>> response = abstractLivestreamService.liveStartPush(
                 SDKManager.getDeviceSDK(responseResult.getData().getDeviceSn()),
                 new LiveStartPushRequest()
                         .setUrl(url)
                         .setUrlType(liveParam.getUrlType())
-                        .setVideoId(liveParam.getVideoId())
+                        .setVideoId(videoId)
                         .setVideoQuality(liveParam.getVideoQuality()));
 
         if (!response.getData().getResult().isSuccess()) {
@@ -201,14 +236,6 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
     }
 
     private String resolveRtspUrl(Object output) {
-        if (output instanceof String) {
-            return (String) output;
-        }
-        if (output instanceof Map<?, ?>) {
-            Map<?, ?> outputMap = (Map<?, ?>) output;
-            Object url = outputMap.get("url");
-            return Objects.toString(url, "");
-        }
         return Objects.toString(output, "");
     }
 
@@ -224,7 +251,8 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
     }
 
     @Override
-    public HttpResultResponse liveStop(VideoId videoId) {
+    public HttpResultResponse liveStop(LiveTypeDTO liveParam) {
+        VideoId videoId = new VideoId(Objects.toString(liveParam.getVideoId(), ""));
         HttpResultResponse<DeviceDTO> responseResult = this.checkBeforeLive(videoId);
         if (HttpResultResponse.CODE_SUCCESS != responseResult.getCode()) {
             return responseResult;
@@ -242,7 +270,8 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
 
     @Override
     public HttpResultResponse liveSetQuality(LiveTypeDTO liveParam) {
-        HttpResultResponse<DeviceDTO> responseResult = this.checkBeforeLive(liveParam.getVideoId());
+        VideoId videoId = new VideoId(Objects.toString(liveParam.getVideoId(), ""));
+        HttpResultResponse<DeviceDTO> responseResult = this.checkBeforeLive(videoId);
         if (responseResult.getCode() != 0) {
             return responseResult;
         }
@@ -250,7 +279,7 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
         TopicServicesResponse<ServicesReplyData> response = abstractLivestreamService.liveSetQuality(
                 SDKManager.getDeviceSDK(responseResult.getData().getDeviceSn()), new LiveSetQualityRequest()
                         .setVideoQuality(liveParam.getVideoQuality())
-                        .setVideoId(liveParam.getVideoId()));
+                        .setVideoId(videoId));
         if (!response.getData().getResult().isSuccess()) {
             return HttpResultResponse.error(response.getData().getResult());
         }
@@ -260,7 +289,8 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
 
     @Override
     public HttpResultResponse liveLensChange(LiveTypeDTO liveParam) {
-        HttpResultResponse<DeviceDTO> responseResult = this.checkBeforeLive(liveParam.getVideoId());
+        VideoId videoId = new VideoId(Objects.toString(liveParam.getVideoId(), ""));
+        HttpResultResponse<DeviceDTO> responseResult = this.checkBeforeLive(videoId);
         if (HttpResultResponse.CODE_SUCCESS != responseResult.getCode()) {
             return responseResult;
         }
@@ -268,7 +298,7 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
         TopicServicesResponse<ServicesReplyData> response = abstractLivestreamService.liveLensChange(
                 SDKManager.getDeviceSDK(responseResult.getData().getDeviceSn()), new LiveLensChangeRequest()
                         .setVideoType(liveParam.getVideoType())
-                        .setVideoId(liveParam.getVideoId()));
+                        .setVideoId(videoId));
 
         if (!response.getData().getResult().isSuccess()) {
             return HttpResultResponse.error(response.getData().getResult());

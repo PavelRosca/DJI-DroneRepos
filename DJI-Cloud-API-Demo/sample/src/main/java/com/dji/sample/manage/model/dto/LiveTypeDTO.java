@@ -5,6 +5,7 @@ import com.dji.sdk.cloudapi.livestream.LensChangeVideoTypeEnum;
 import com.dji.sdk.cloudapi.livestream.UrlTypeEnum;
 import com.dji.sdk.cloudapi.livestream.VideoQualityEnum;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.Data;
 
 /**
@@ -20,7 +21,8 @@ public class LiveTypeDTO {
     private UrlTypeEnum urlType;
 
     @JsonProperty("video_id")
-    private VideoId videoId;
+    @JsonDeserialize(using = VideoIdDeserializer.class)
+    private Object videoId;
 
     @JsonProperty("video_quality")
     private VideoQualityEnum videoQuality;

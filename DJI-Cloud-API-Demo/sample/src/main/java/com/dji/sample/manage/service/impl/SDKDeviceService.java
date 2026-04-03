@@ -342,6 +342,15 @@ public class SDKDeviceService extends AbstractDeviceService {
                                 .build()).collect(Collectors.toList()));
     }
 
+    @Override
+    public void rcLiveStatusUpdate(TopicStateRequest<RcLiveStatus> request, MessageHeaders headers) {
+        // Treat live status as a heartbeat to prevent stale offline state.
+        deviceRedisService.getDeviceOnline(request.getFrom()).ifPresent(deviceRedisService::setDeviceOnline);
+        if (StringUtils.hasText(request.getGateway())) {
+            deviceRedisService.getDeviceOnline(request.getGateway()).ifPresent(deviceRedisService::setDeviceOnline);
+        }
+    }
+
     private void dockGoOnline(DeviceDTO gateway, DeviceDTO subDevice) {
         if (DeviceDomainEnum.DOCK != gateway.getDomain()) {
             return;

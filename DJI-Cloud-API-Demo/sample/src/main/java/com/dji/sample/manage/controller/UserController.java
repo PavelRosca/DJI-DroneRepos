@@ -1,11 +1,13 @@
 package com.dji.sample.manage.controller;
 
 import com.dji.sample.common.model.CustomClaim;
+import com.dji.sample.manage.model.dto.UserDTO;
 import com.dji.sample.manage.model.dto.UserListDTO;
 import com.dji.sample.manage.service.IUserService;
 import com.dji.sdk.common.HttpResultResponse;
 import com.dji.sdk.common.PaginationData;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
@@ -28,7 +30,9 @@ public class UserController {
     @GetMapping("/current")
     public HttpResultResponse getCurrentUserInfo(HttpServletRequest request) {
         CustomClaim customClaim = (CustomClaim)request.getAttribute(TOKEN_CLAIM);
-        return userService.getUserByUsername(customClaim.getUsername(), customClaim.getWorkspaceId());
+        HttpResultResponse response = userService.getUserByUsername(customClaim.getUsername(), customClaim.getWorkspaceId());
+        rewriteMqttAddrForClient(response, request.getServerName());
+        return response;
     }
 
     /**
@@ -60,5 +64,24 @@ public class UserController {
 
         userService.updateUser(workspaceId, userId, user);
         return HttpResultResponse.success();
+    }
+
+    private void rewriteMqttAddrForClient(HttpResultResponse response, String serverName) {
+        if (response == null || response.getData() == null || !StringUtils.hasText(serverName)) {
+            return;
+        }
+        if (!(response.getData() instanceof UserDTO)) {
+            return;
+        }
+
+        UserDTO user = (UserDTO) response.getData();
+        if (!StringUtils.hasText(user.getMqttAddr())) {
+            return;
+        }
+
+        String mqttAddr = user.getMqttAddr();
+        mqttAddr = mqttAddr.replace("://localhost", "://" + serverName)
+                .replace("://127.0.0.1", "://" + serverName);
+        user.setMqttAddr(mqttAddr);
     }
 }

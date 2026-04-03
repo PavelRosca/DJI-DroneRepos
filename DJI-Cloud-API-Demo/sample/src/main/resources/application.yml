@@ -45,7 +45,7 @@ mqtt:
   # BASIC parameters are required.
   BASIC:
     protocol: WS # @see com.dji.sample.component.mqtt.model.MqttProtocolEnum
-    host: 192.168.1.174
+    host: localhost
     port: 8083
     username: JavaServer
     password: 123456
@@ -54,7 +54,7 @@ mqtt:
     path: /mqtt
   DRC:
     protocol: WS # @see com.dji.sample.component.mqtt.model.MqttProtocolEnum
-    host: 192.168.1.174
+    host: localhost
     port: 8083
     path: /mqtt
     username: JavaServer
@@ -150,7 +150,7 @@ livestream:
 
     # RTMP  Note: This IP is the address of the streaming server. If you want to see livestream on web page, you need to convert the RTMP stream to WebRTC stream.
     rtmp:
-      url: rtmp://192.168.1.174/live/  # Example: 'rtmp://192.168.1.1/live/'
+      url: rtmp://192.168.1.193/live/  # Example: 'rtmp://192.168.1.1/live/'
     rtsp:
       username: Please enter the username.
       password: Please enter the password.
@@ -168,4 +168,4 @@ livestream:
 
     # Webrtc: Only supports using whip standard
     whip:
-      url: http://192.168.1.174:8889 # Example: 'http://192.168.1.1:8889'
+      url: http://192.168.1.193:8889 # Example: 'http://192.168.1.1:8889'

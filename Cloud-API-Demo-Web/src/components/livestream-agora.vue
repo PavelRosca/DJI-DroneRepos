@@ -334,7 +334,7 @@ const onDroneSelect = (val: SelectOption) => {
   }
   val.more.forEach((ele: any) => {
     dronePara.cameraList.push({
-      label: ele.name,
+      label: ele.name || ele.index,
       value: ele.index,
       more: ele.videos_list || ele.videosList || []
     })
@@ -380,7 +380,7 @@ const onCameraSelect = (val: SelectOption) => {
 }
 
 const onCameraChange = (value: string) => {
-  const selected = dronePara.cameraList.find((item: SelectOption) => item.value === value)
+  const selected = dronePara.cameraList.find((item: SelectOption) => String(item.value) === String(value))
   if (selected) {
     onCameraSelect(selected)
   }

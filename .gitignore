@@ -64,3 +64,9 @@ HELP.md
 # ===== Local toolchainss / binaries =====
 DJI-Cloud-API-Demo/.tools/
 DJI-Cloud-API-Demo/tools/
+
+# ===== Root-level runtime logs =====
+*.log
+
+# ===== Claude Code local config =====
+.claude/

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn clean:*)",
+      "Bash(where mediamtx:*)",
+      "Read(//c/Users/Pavel/**)"
+    ]
+  }
+}

@@ -15,9 +15,13 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.URL;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Enumeration;
 import java.util.Objects;
 
 /**
@@ -30,6 +34,39 @@ import java.util.Objects;
 public class MinIOServiceImpl implements IOssService {
 
     private MinioClient client;
+
+    private String resolveEndpointForClients() {
+        String endpoint = OssConfiguration.endpoint;
+        if (Objects.isNull(endpoint) || (!endpoint.contains("localhost") && !endpoint.contains("127.0.0.1"))) {
+            return endpoint;
+        }
+
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                if (!iface.isUp() || iface.isLoopback() || iface.isVirtual()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress address = addresses.nextElement();
+                    if (address instanceof Inet4Address && !address.isLoopbackAddress()) {
+                        String lanIp = address.getHostAddress();
+                        String resolved = endpoint
+                                .replace("localhost", lanIp)
+                                .replace("127.0.0.1", lanIp);
+                        log.info("Resolved MinIO endpoint for presigned URLs: {} -> {}", endpoint, resolved);
+                        return resolved;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not resolve LAN IP for MinIO endpoint. Using configured endpoint: {}", endpoint);
+        }
+
+        return endpoint;
+    }
     
     @Override
     public OssTypeEnum getOssType() {
@@ -39,7 +76,7 @@ public class MinIOServiceImpl implements IOssService {
     @Override
     public CredentialsToken getCredentials() {
         try {
-            AssumeRoleProvider provider = new AssumeRoleProvider(OssConfiguration.endpoint, OssConfiguration.accessKey,
+            AssumeRoleProvider provider = new AssumeRoleProvider(resolveEndpointForClients(), OssConfiguration.accessKey,
                     OssConfiguration.secretKey, Math.toIntExact(OssConfiguration.expire),
                     null, OssConfiguration.region, null, null, null, null);
             Credentials credential = provider.fetch();
@@ -115,8 +152,9 @@ public class MinIOServiceImpl implements IOssService {
         if (Objects.nonNull(this.client)) {
             return;
         }
+        String endpoint = resolveEndpointForClients();
         this.client = MinioClient.builder()
-                .endpoint(OssConfiguration.endpoint)
+                .endpoint(endpoint)
                 .credentials(OssConfiguration.accessKey, OssConfiguration.secretKey)
                 .region(OssConfiguration.region)
                 .build();

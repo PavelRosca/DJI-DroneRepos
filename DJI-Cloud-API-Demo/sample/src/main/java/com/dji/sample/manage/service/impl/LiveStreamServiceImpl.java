@@ -18,6 +18,9 @@ import com.dji.sdk.mqtt.services.TopicServicesResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -350,7 +353,7 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
                 return agoraUrl.setSn(videoId.getDroneSn());
             case RTMP:
                 LivestreamRtmpUrl rtmpUrl = (LivestreamRtmpUrl) url.clone();
-                return rtmpUrl.setUrl(rtmpUrl.getUrl() + videoId.getDroneSn() + "-" + videoId.getPayloadIndex().toString());
+                return rtmpUrl.setUrl(resolveLanUrl(rtmpUrl.getUrl()) + videoId.getDroneSn() + "-" + videoId.getPayloadIndex().toString());
             case GB28181:
                 String random = String.valueOf(Math.abs(videoId.getDroneSn().hashCode()) % 1000);
                 LivestreamGb28181Url gbUrl = (LivestreamGb28181Url) url.clone();
@@ -366,6 +369,31 @@ public class LiveStreamServiceImpl implements ILiveStreamService {
 
     private String buildWhipPublishUrl(String baseUrl, VideoId videoId) {
         String normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        return normalizedBaseUrl + "/" + videoId.getDroneSn() + "-" + videoId.getPayloadIndex() + "/whip";
+        return resolveLanUrl(normalizedBaseUrl) + "/" + videoId.getDroneSn() + "-" + videoId.getPayloadIndex() + "/whip";
+    }
+
+    private String resolveLanUrl(String url) {
+        if (!url.contains("localhost") && !url.contains("127.0.0.1")) {
+            return url;
+        }
+        try {
+            java.util.Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+            while (ifaces.hasMoreElements()) {
+                NetworkInterface iface = ifaces.nextElement();
+                if (!iface.isUp() || iface.isLoopback() || iface.isVirtual()) continue;
+                java.util.Enumeration<InetAddress> addrs = iface.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    InetAddress addr = addrs.nextElement();
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        String lanIp = addr.getHostAddress();
+                        log.debug("Resolved livestream URL: {} -> {}", url, lanIp);
+                        return url.replace("localhost", lanIp).replace("127.0.0.1", lanIp);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not detect LAN IP for livestream URL, using: {}", url);
+        }
+        return url;
     }
 }

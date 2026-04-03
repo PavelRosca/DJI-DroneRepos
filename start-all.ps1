@@ -95,9 +95,27 @@ if (Test-Port 8083) {
 }
 
 # -------------------------------------------------------
-# 5. MediaMTX (port 8889)
+# 5. MinIO (port 9000)
 # -------------------------------------------------------
-Write-Host "[5/7] MediaMTX (8889)..." -ForegroundColor Yellow
+Write-Host "[5/8] MinIO (9000)..." -ForegroundColor Yellow
+if (Test-Port 9000) {
+    Write-Host "  Already running." -ForegroundColor Green
+} else {
+    $minioExe = 'E:\downloads\minio.exe'
+    if (Test-Path $minioExe) {
+        Start-Process powershell -ArgumentList '-NoExit','-Command',"& '$minioExe' server C:\minio-data --console-address :9001" -WindowStyle Normal
+        Start-Sleep -Seconds 4
+        if (Test-Port 9000) { Write-Host "  Started." -ForegroundColor Green }
+        else { Write-Host "  WARNING: MinIO not reachable on 9000" -ForegroundColor Red }
+    } else {
+        Write-Host "  ERROR: minio.exe not found at $minioExe" -ForegroundColor Red
+    }
+}
+
+# -------------------------------------------------------
+# 6. MediaMTX (port 8889)
+# -------------------------------------------------------
+Write-Host "[6/8] MediaMTX (8889)..." -ForegroundColor Yellow
 if (Test-Port 8889) {
     Write-Host "  Already running." -ForegroundColor Green
 } else {
@@ -116,7 +134,7 @@ if (Test-Port 8889) {
 # -------------------------------------------------------
 # 6. Backend Spring Boot (port 6789)
 # -------------------------------------------------------
-Write-Host "[6/7] Backend (6789)..." -ForegroundColor Yellow
+Write-Host "[7/8] Backend (6789)..." -ForegroundColor Yellow
 if (Test-Port 6789) {
     Write-Host "  Already running." -ForegroundColor Green
 } else {
@@ -132,7 +150,7 @@ if (Test-Port 6789) {
 # -------------------------------------------------------
 # 7. Frontend Vite (port 8080)
 # -------------------------------------------------------
-Write-Host "[7/7] Frontend (8080)..." -ForegroundColor Yellow
+Write-Host "[8/8] Frontend (8080)..." -ForegroundColor Yellow
 if (Test-Port 8080) {
     Write-Host "  Already running." -ForegroundColor Green
 } else {
@@ -149,7 +167,7 @@ if (Test-Port 8080) {
 # -------------------------------------------------------
 Write-Host ""
 Write-Host "=== Port Status ===" -ForegroundColor Cyan
-$ports = @(1883, 3306, 6379, 6789, 8080, 8083, 8889)
+$ports = @(1883, 3306, 6379, 6789, 8080, 8083, 8889, 9000)
 foreach ($p in $ports) {
     $status = if (Test-Port $p) { "UP" } else { "DOWN" }
     $color  = if ($status -eq 'UP') { 'Green' } else { 'Red' }

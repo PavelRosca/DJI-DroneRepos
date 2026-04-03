@@ -87,17 +87,15 @@ url:
 
 # Tutorial: https://www.alibabacloud.com/help/en/object-storage-service/latest/use-a-temporary-credential-provided-by-sts-to-access-oss
 oss:
-  enable: false
-  provider: ALIYUN # @see com.dji.sample.component.OssConfiguration.model.enums.OssTypeEnum
-  endpoint: https://oss-cn-hangzhou.aliyuncs.com
-  access-key: Please enter your access key.
-  secret-key: Please enter your secret key.
+  enable: true
+  provider: minio # @see com.dji.sample.component.OssConfiguration.model.enums.OssTypeEnum
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket: cloud-bucket
   expire: 3600
-  region: Please enter your oss region. # cn-hangzhou
-  role-session-name: cloudApi
-  role-arn: Please enter your role arn. # acs:ram::123456789:role/stsrole
-  bucket: Please enter your bucket name.
-  object-dir-prefix: Please enter a folder name.
+  region: us-east-1
+  object-dir-prefix: media/
 
 #oss:
 #  enable: true
@@ -150,7 +148,7 @@ livestream:
 
     # RTMP  Note: This IP is the address of the streaming server. If you want to see livestream on web page, you need to convert the RTMP stream to WebRTC stream.
     rtmp:
-      url: rtmp://192.168.1.193/live/  # Example: 'rtmp://192.168.1.1/live/'
+      url: rtmp://localhost/live/
     rtsp:
       username: Please enter the username.
       password: Please enter the password.
@@ -168,4 +166,4 @@ livestream:
 
     # Webrtc: Only supports using whip standard
     whip:
-      url: http://192.168.1.193:8889 # Example: 'http://192.168.1.1:8889'
+      url: http://localhost:8889

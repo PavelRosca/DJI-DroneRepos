@@ -43,7 +43,8 @@ public class MinIOServiceImpl implements IOssService {
                     OssConfiguration.secretKey, Math.toIntExact(OssConfiguration.expire),
                     null, OssConfiguration.region, null, null, null, null);
             Credentials credential = provider.fetch();
-            return new CredentialsToken(credential.accessKey(), credential.secretKey(), credential.sessionToken(), OssConfiguration.expire);
+            long expireAt = System.currentTimeMillis() / 1000 + OssConfiguration.expire;
+            return new CredentialsToken(credential.accessKey(), credential.secretKey(), credential.sessionToken(), expireAt);
         } catch (NoSuchAlgorithmException e) {
             log.debug("Failed to obtain sts.");
             e.printStackTrace();
